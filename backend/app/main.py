@@ -1,8 +1,24 @@
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
 
-app = FastAPI(title="Yukti API", version="0.1.0", description="API scaffold for Yukti workflow automation.")
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+
+from app.schemas import PlanRequest, PlanResponse
+from app.services.planner import (
+    PlannerConfigurationError,
+    PlannerOutputError,
+    create_workflow_plan,
+)
+
+from pathlib import Path
+from dotenv import load_dotenv
+
+load_dotenv(Path(__file__).resolve().parents[1] / ".env")
+
+app = FastAPI(
+    title="Yukti API",
+    version="0.2.0",
+    description="AI-assisted browser workflow planning API.",
+)
 
 app.add_middleware(
     CORSMiddleware,
@@ -12,19 +28,27 @@ app.add_middleware(
     allow_headers=["Content-Type"],
 )
 
-class PlanRequest(BaseModel):
-    prompt: str = Field(min_length=3, max_length=4000)
 
 @app.get("/health")
-def health():
-    return {"status": "ok", "service": "yukti-api", "version": "0.1.0"}
-
-@app.post("/api/plan")
-def create_plan(request: PlanRequest):
-    """Temporary placeholder. Real LLM planning and schema validation are not implemented yet."""
+def health() -> dict[str, str]:
     return {
-        "status": "not_implemented",
-        "message": "Workflow planning is not connected yet. This endpoint is a scaffold only.",
-        "received_prompt_length": len(request.prompt),
-        "steps": [],
+        "status": "ok",
+        "service": "yukti-api",
+        "version": "0.2.0",
     }
+
+
+@app.post("/api/plan", response_model=PlanResponse)
+def create_plan(request: PlanRequest) -> PlanResponse:
+    try:
+        return create_workflow_plan(request.prompt)
+    except PlannerConfigurationError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=str(exc),
+        ) from exc
+    except PlannerOutputError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=str(exc),
+        ) from exc
