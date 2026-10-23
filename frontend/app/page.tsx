@@ -1,14 +1,22 @@
 
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { CircleHelp, Sparkles } from "lucide-react";
+
 import AppHeader from "@/components/layout/app-header";
 import AppSidebar from "@/components/layout/app-sidebar";
 import TaskPrompt from "@/components/tasks/task-prompt";
 import WorkflowPreview from "@/components/tasks/workflow-preview";
-import { createPlan } from "@/lib/api-client";
-import type { PlanResponse, PlanningStatus } from "@/types/workflow";
+
+import { createPlan, executePlan } from "@/lib/api-client";
+
+import type {
+  ExecutionResponse,
+  ExecutionStatus,
+  PlanResponse,
+  PlanningStatus,
+} from "@/types/workflow";
 
 export default function HomePage() {
   const [status, setStatus] = useState<PlanningStatus>("idle");
@@ -17,18 +25,42 @@ export default function HomePage() {
   );
   const [plan, setPlan] = useState<PlanResponse | null>(null);
 
+  const [executionStatus, setExecutionStatus] =
+    useState<ExecutionStatus>("idle");
+  const [execution, setExecution] = useState<ExecutionResponse | null>(null);
+  const [executionMessage, setExecutionMessage] = useState("");
+  const planningRequest = useRef(false);
+  const executionRequest = useRef(false);
+
   async function handleCreatePlan(prompt: string) {
+    if (planningRequest.current || executionRequest.current) {
+      return;
+    }
+
+    planningRequest.current = true;
     setStatus("planning");
     setPlan(null);
     setMessage("Sending your request to the Yukti planning API…");
 
+    setExecutionStatus("idle");
+    setExecution(null);
+    setExecutionMessage("");
+
     try {
       const response = await createPlan({ prompt });
       setPlan(response);
+
+      if (response.status !== "ready" || !response.steps?.length) {
+        setStatus("error");
+        setMessage(
+          response.message || "The API did not return an executable workflow.",
+        );
+        return;
+      }
+
       setStatus("success");
       setMessage(
-        response.message ??
-          "The planning endpoint responded successfully. Check the response below.",
+        response.message || "Review the workflow below before approving it.",
       );
     } catch (error) {
       setStatus("error");
@@ -37,6 +69,70 @@ export default function HomePage() {
           ? error.message
           : "Something went wrong while requesting a plan.",
       );
+    } finally {
+      planningRequest.current = false;
+    }
+  }
+
+  async function handleApproveAndRun() {
+    if (
+      executionRequest.current ||
+      planningRequest.current ||
+      !plan ||
+      plan.status !== "ready" ||
+      !plan.title ||
+      !plan.steps.length ||
+      executionStatus === "running" ||
+      executionStatus === "completed"
+    ) {
+      return;
+    }
+
+    executionRequest.current = true;
+    const confirmed = window.confirm(
+      `Approve and execute "${plan.title ?? "this workflow"}"? Review all steps before continuing.`,
+    );
+
+    if (!confirmed) {
+      executionRequest.current = false;
+      return;
+    }
+
+    setExecutionStatus("running");
+    setExecution(null);
+    setExecutionMessage("Sending the approved workflow to the browser executor…");
+
+    try {
+      const result = await executePlan({
+        title: plan.title,
+        steps: plan.steps,
+      });
+      setExecution(result);
+
+      if (result.status === "completed") {
+        setExecutionStatus("completed");
+        setExecutionMessage("All workflow steps completed.");
+      } else {
+        setExecutionStatus("failed");
+        const failedStep = result.results.find(
+          (item) => item.status === "failed",
+        );
+
+        setExecutionMessage(
+          failedStep
+            ? `Execution stopped at ${failedStep.step_id}: ${failedStep.error ?? "Unknown step error"}`
+            : "Execution failed. Review the step results.",
+        );
+      }
+    } catch (error) {
+      setExecutionStatus("failed");
+      setExecutionMessage(
+        error instanceof Error
+          ? error.message
+          : "An unexpected execution error occurred.",
+      );
+    } finally {
+      executionRequest.current = false;
     }
   }
 
@@ -62,12 +158,12 @@ export default function HomePage() {
             </h1>
 
             <p className="mt-4 max-w-2xl text-sm leading-6 text-slate-400 sm:text-base">
-              Describe the work. Yukti helps turn it into a clear workflow you
-              can review before anything runs.
+              Describe the work. Yukti turns it into a clear workflow you can
+              review and explicitly approve before browser execution.
             </p>
 
             <TaskPrompt
-              loading={status === "planning"}
+              loading={status === "planning" || executionStatus === "running"}
               onSubmit={handleCreatePlan}
             />
 
@@ -75,6 +171,10 @@ export default function HomePage() {
               status={status}
               message={message}
               plan={plan}
+              executionStatus={executionStatus}
+              execution={execution}
+              executionMessage={executionMessage}
+              onApproveAndRun={handleApproveAndRun}
             />
 
             <div className="mt-8 flex items-start gap-3 rounded-xl border border-amber-300/15 bg-amber-300/[0.04] p-4 text-xs leading-5 text-amber-100/70">
@@ -87,10 +187,10 @@ export default function HomePage() {
                 <span className="font-medium text-amber-100">
                   Development preview:
                 </span>{" "}
-                this dashboard connects to the planning endpoint only. Browser
-                execution, task persistence, run history, and exports are not
-                implemented here. Yukti must require plan review and explicit
-                approval before executing a workflow.
+                Browser execution is synchronous, and results appear after the
+                run finishes. Persistent task history, background jobs, and
+                exports are not implemented yet. Review each step and only run
+                workflows you are authorized to perform.
               </p>
             </div>
 

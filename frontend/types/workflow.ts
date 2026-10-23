@@ -38,4 +38,32 @@ export interface PlanResponse {
   steps: WorkflowStep[];
 }
 
+export interface WorkflowPlan {
+  title: string;
+  steps: WorkflowStep[];
+}
+
 export type PlanningStatus = "idle" | "planning" | "success" | "error";
+
+export type ExecutionStatus =
+  | "idle"
+  | "running"
+  | "completed"
+  | "failed";
+
+export interface ExecuteRequest {
+  plan: WorkflowPlan;
+  approved: true;
+}
+
+export interface StepExecutionResult {
+  step_id: string;
+  status: "completed" | "failed";
+  result?: Record<string, unknown>;
+  error?: string;
+}
+
+export interface ExecutionResponse {
+  status: "completed" | "failed";
+  results: StepExecutionResult[];
+}

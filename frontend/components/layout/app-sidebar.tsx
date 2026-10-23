@@ -22,14 +22,15 @@ export default function AppSidebar() {
   return (
     <aside className="hidden w-[248px] shrink-0 border-r border-white/[0.08] bg-[#0b1020] p-5 md:flex md:flex-col">
       <div className="mb-10 flex items-center gap-3 px-2">
-        <div className="relative grid h-11 w-11 shrink-0 place-items-center overflow-hidden rounded-xl border border-white/10 bg-white/[0.04]">
+        <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-lg border border-white/10 bg-white">
           <Image
             src="/brand/yukti-logo.png"
             alt="Yukti"
-            fill
-            sizes="44px"
+            width={100}
+            height={100}
+            sizes="80px"
             priority
-            className="object-contain p-1"
+            className="absolute left-1/2 top-[-1rem] h-20 w-20 max-w-none -translate-x-1/2 object-contain"
           />
         </div>
         <div className="min-w-0">

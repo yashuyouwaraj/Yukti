@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.schemas import WorkflowPlan, WorkflowStep
+from app.services.planner import PlannerUnavailableError
 
 client = TestClient(app)
 
@@ -62,3 +63,23 @@ def test_plan_rejects_long_prompt() -> None:
     response = client.post("/api/plan", json={"prompt": "a" * 4001})
 
     assert response.status_code == 422
+
+
+@patch(
+    "app.main.create_workflow_plan",
+    side_effect=PlannerUnavailableError(
+        "Gemini is temporarily unavailable after several attempts. "
+        "Please try again shortly."
+    ),
+)
+def test_plan_reports_gemini_unavailable_as_service_unavailable(
+    mock_plan,
+) -> None:
+    response = client.post(
+        "/api/plan",
+        json={"prompt": "Open example.com"},
+    )
+
+    assert response.status_code == 503
+    assert "temporarily unavailable" in response.json()["detail"]
+    mock_plan.assert_called_once()

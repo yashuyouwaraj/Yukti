@@ -40,3 +40,7 @@ class PlanResponse(BaseModel):
     workflow_id: str | None = None
     title: str | None = None
     steps: list[WorkflowStep] = Field(default_factory=list)
+
+class ExecuteRequest(BaseModel):
+    plan: WorkflowPlan
+    approved: bool = False
